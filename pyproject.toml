@@ -27,10 +27,78 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "ruff>=0.5",
+    "black>=24.4",
+    "isort>=5.13",
+    "mypy>=1.10",
     "pytest>=8.2",
     "pytest-django>=4.8",
+    "pytest-celery>=1.0",
+    "pytest-cov>=5.0",
     "factory-boy>=3.3",
+    "freezegun>=1.5",
+    "respx>=0.21",
+    "fakeredis[lua]>=2.21",
+    "hypothesis>=6.100",
+    "django-stubs>=5.0",
+    "djangorestframework-stubs>=3.15",
+    "pre-commit>=3.7",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+extend-exclude = '''
+/(
+    migrations
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["budget_cortex", "apps", "tasks"]
+skip_glob = ["**/migrations/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["**/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+mypy_path = "src"
+exclude = ["migrations/"]
+
+[tool.django-stubs]
+django_settings_module = "budget_cortex.settings.test"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "budget_cortex.settings.test"
+python_files = ["test_*.py", "tests.py"]
+pythonpath = ["src"]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+markers = [
+    "requires_postgres: integration test that needs real PostgreSQL (skipped on SQLite)",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:celery",
+    "ignore::DeprecationWarning:passlib",
+    "ignore:'crypt' is deprecated:DeprecationWarning",
+    "ignore:.*pkg_resources.*:DeprecationWarning",
+]
