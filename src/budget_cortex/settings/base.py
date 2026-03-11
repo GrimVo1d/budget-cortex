@@ -6,6 +6,7 @@ and defaults.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 import environ
@@ -46,6 +47,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "django_filters",
     "drf_spectacular",
+    "apps.accounts",
 ]
 
 MIDDLEWARE = [
@@ -103,6 +105,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -138,6 +141,14 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 JWT_SIGNING_KEY = env("JWT_SIGNING_KEY")
 FX_PROVIDER = env("FX_PROVIDER")
 FX_BASE_CURRENCY = env("FX_BASE_CURRENCY")
+
+SIMPLE_JWT = {
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": JWT_SIGNING_KEY,
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
 
 LOG_LEVEL = env("LOG_LEVEL")
 LOG_FORMAT = env("LOG_FORMAT")
