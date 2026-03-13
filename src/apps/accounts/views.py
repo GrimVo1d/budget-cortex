@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from rest_framework import generics, permissions
 
-from .serializers import RegisterSerializer
+from apps.core.mixins import UserScopedModelViewSet
+
+from .models import Account
+from .serializers import AccountSerializer, RegisterSerializer
 
 
 class RegisterView(generics.CreateAPIView):
@@ -10,3 +13,10 @@ class RegisterView(generics.CreateAPIView):
 
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+
+
+class AccountViewSet(UserScopedModelViewSet):
+    queryset = Account.objects.all()
+    serializer_class = AccountSerializer
+    filterset_fields = ["type", "currency", "is_archived"]
+    ordering_fields = ["name", "created_at"]
