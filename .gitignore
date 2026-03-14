@@ -27,7 +27,20 @@ media/
 .idea/
 .vscode/
 *.swp
+*.swo
+*~
+.vim/
+*.code-workspace
+
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# pgadmin dev artifacts
+.pgadmin/
+pgdata-local/
+*.dump
+*.sql.gz
 
 build/
 dist/
