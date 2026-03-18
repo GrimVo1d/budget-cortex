@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from .models import Category, Tag
+from .models import Category, Tag, Transaction
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -37,3 +37,40 @@ class TagSerializer(serializers.ModelSerializer):
         model = Tag
         fields = ["id", "name", "created_at"]
         read_only_fields = ["id", "created_at"]
+
+
+class TransactionSerializer(serializers.ModelSerializer):
+    tags = serializers.PrimaryKeyRelatedField(queryset=Tag.objects.all(), many=True, required=False)
+
+    class Meta:
+        model = Transaction
+        fields = [
+            "id",
+            "account",
+            "amount",
+            "currency",
+            "category",
+            "tags",
+            "description",
+            "occurred_at",
+            "type",
+            "transfer_pair",
+            "external_id",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "transfer_pair", "external_id", "created_at", "updated_at"]
+
+    def validate_account(self, account):
+        request = self.context.get("request")
+        if request is not None and account.user_id != request.user.id:
+            raise serializers.ValidationError("account must belong to the requesting user")
+        return account
+
+    def validate_category(self, category):
+        if category is None:
+            return None
+        request = self.context.get("request")
+        if request is not None and category.user_id != request.user.id:
+            raise serializers.ValidationError("category must belong to the requesting user")
+        return category
