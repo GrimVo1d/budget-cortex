@@ -159,6 +159,16 @@ class Transaction(models.Model):
     objects = TransactionQuerySet.as_manager()
 
     class Meta:
+        constraints = [
+            # Same (user, import_hash) shouldn't appear twice — protects CSV
+            # re-imports from inserting duplicates. Partial unique keeps the
+            # index small (only rows with a hash, which is < 30% in practice).
+            models.UniqueConstraint(
+                fields=["user", "import_hash"],
+                condition=models.Q(import_hash__isnull=False),
+                name="tx_user_import_hash_unique",
+            ),
+        ]
         indexes = [
             models.Index(
                 fields=["user", "-occurred_at"],
