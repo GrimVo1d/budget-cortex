@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.ledger",
+    "apps.analytics",
 ]
 
 MIDDLEWARE = [

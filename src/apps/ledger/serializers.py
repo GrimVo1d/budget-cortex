@@ -41,6 +41,7 @@ class TagSerializer(serializers.ModelSerializer):
 
 class TransactionSerializer(serializers.ModelSerializer):
     tags = serializers.PrimaryKeyRelatedField(queryset=Tag.objects.all(), many=True, required=False)
+    running_balance = serializers.SerializerMethodField()
 
     class Meta:
         model = Transaction
@@ -56,10 +57,25 @@ class TransactionSerializer(serializers.ModelSerializer):
             "type",
             "transfer_pair",
             "external_id",
+            "running_balance",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "transfer_pair", "external_id", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "transfer_pair",
+            "external_id",
+            "running_balance",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_running_balance(self, obj: Transaction) -> str | None:
+        balances = self.context.get("running_balances") or {}
+        if obj.id not in balances:
+            return None
+        opening = obj.account.opening_balance if obj.account_id else 0
+        return str(balances[obj.id] + opening)
 
     def validate_account(self, account):
         request = self.context.get("request")
