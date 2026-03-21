@@ -90,3 +90,14 @@ class TransactionSerializer(serializers.ModelSerializer):
         if request is not None and category.user_id != request.user.id:
             raise serializers.ValidationError("category must belong to the requesting user")
         return category
+
+
+class TransferRequestSerializer(serializers.Serializer):
+    from_account = serializers.IntegerField(min_value=1)
+    to_account = serializers.IntegerField(min_value=1)
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=0.01)
+    fx_rate = serializers.DecimalField(
+        max_digits=20, decimal_places=10, required=False, allow_null=True
+    )
+    occurred_at = serializers.DateTimeField()
+    description = serializers.CharField(required=False, allow_blank=True, default="")

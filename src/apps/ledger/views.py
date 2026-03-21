@@ -2,14 +2,23 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from rest_framework import status
+from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.accounts.models import Account
 from apps.analytics.queries.running_balance import running_balances_for
 from apps.core.mixins import UserScopedModelViewSet
 
 from .filters import TransactionFilter
 from .models import Category, Tag, Transaction
-from .serializers import CategorySerializer, TagSerializer, TransactionSerializer
+from .serializers import (
+    CategorySerializer,
+    TagSerializer,
+    TransactionSerializer,
+    TransferRequestSerializer,
+)
+from .services import TransferError, TransferRequest, create_transfer
 
 
 class CategoryViewSet(UserScopedModelViewSet):
@@ -51,3 +60,44 @@ class TransactionViewSet(UserScopedModelViewSet):
         if page is not None:
             return self.get_paginated_response(data)
         return Response(data)
+
+    @action(detail=False, methods=["post"], url_path="transfer")
+    def transfer(self, request):
+        ser = TransferRequestSerializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+
+        try:
+            from_acc = Account.objects.for_user(request.user.id).get(pk=d["from_account"])
+            to_acc = Account.objects.for_user(request.user.id).get(pk=d["to_account"])
+        except Account.DoesNotExist:
+            return Response(
+                {"code": "account_not_found", "detail": "account does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            debit, credit = create_transfer(
+                TransferRequest(
+                    user_id=request.user.id,
+                    from_account=from_acc,
+                    to_account=to_acc,
+                    amount=d["amount"],
+                    occurred_at=d["occurred_at"],
+                    description=d.get("description", ""),
+                    fx_rate=d.get("fx_rate"),
+                )
+            )
+        except TransferError as exc:
+            return Response(
+                {"code": "transfer_error", "detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                "debit": TransactionSerializer(debit).data,
+                "credit": TransactionSerializer(credit).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
