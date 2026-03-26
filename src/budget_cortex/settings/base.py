@@ -156,6 +156,43 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
+from kombu import Queue  # noqa: E402
+
+CELERY_TASK_QUEUES = (
+    Queue("default"),
+    Queue("low"),
+)
+CELERY_TASK_DEFAULT_QUEUE = "default"
+
+CELERY_TASK_ROUTES = {
+    "tasks.imports.parse_csv_import": {"queue": "default"},
+    "tasks.analytics.refresh_materialized_views": {"queue": "low"},
+    "tasks.fx.fetch_fx_rates": {"queue": "low"},
+    "tasks.budgets.evaluate_budgets": {"queue": "low"},
+    "tasks.imports.cleanup_csv_files": {"queue": "low"},
+}
+
+from celery.schedules import crontab  # noqa: E402
+
+CELERY_BEAT_SCHEDULE = {
+    "refresh-materialized-views": {
+        "task": "tasks.analytics.refresh_materialized_views",
+        "schedule": crontab(minute="0"),  # every hour
+    },
+    "fetch-fx-rates": {
+        "task": "tasks.fx.fetch_fx_rates",
+        "schedule": crontab(hour="6", minute="0"),  # daily 06:00 UTC
+    },
+    "evaluate-budgets": {
+        "task": "tasks.budgets.evaluate_budgets",
+        "schedule": crontab(hour="7", minute="0"),  # daily 07:00 UTC
+    },
+    "cleanup-csv-files": {
+        "task": "tasks.imports.cleanup_csv_files",
+        "schedule": crontab(hour="3", minute="0", day_of_week="sunday"),
+    },
+}
+
 LOG_LEVEL = env("LOG_LEVEL")
 LOG_FORMAT = env("LOG_FORMAT")
 
