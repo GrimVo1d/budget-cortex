@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "apps.ledger",
     "apps.analytics",
     "apps.fx",
+    "apps.budgets",
 ]
 
 MIDDLEWARE = [
