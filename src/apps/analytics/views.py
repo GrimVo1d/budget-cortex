@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 
 from .queries.by_category import by_category_report
 from .queries.cashflow import cashflow_report
+from .queries.overruns import overruns_report
 
 
 def _parse_month(raw: str) -> date:
@@ -68,6 +69,26 @@ class ByCategoryReportView(APIView):
                     "root_name": r.root_name,
                     "currency": r.currency,
                     "total_expense": str(r.total_expense),
+                }
+                for r in rows
+            ]
+        )
+
+
+class OverrunsReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        rows = overruns_report(request.user.id)
+        return Response(
+            [
+                {
+                    "budget_id": r.budget_id,
+                    "category_id": r.category_id,
+                    "currency": r.currency,
+                    "limit_amount": str(r.limit_amount),
+                    "spent_amount": str(r.spent_amount),
+                    "overrun_pct": r.overrun_pct,
                 }
                 for r in rows
             ]
