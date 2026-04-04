@@ -61,6 +61,38 @@ class TransactionViewSet(UserScopedModelViewSet):
             return self.get_paginated_response(data)
         return Response(data)
 
+    @action(detail=False, methods=["get"], url_path="export")
+    def export(self, request):
+        from apps.analytics.exports import stream_csv
+
+        qs = self.filter_queryset(self.get_queryset()).order_by("occurred_at", "id")
+        header = [
+            "id",
+            "occurred_at",
+            "account_id",
+            "category_id",
+            "type",
+            "amount",
+            "currency",
+            "description",
+        ]
+
+        def rows():
+            yield header
+            for t in qs.iterator(chunk_size=1000):
+                yield [
+                    t.id,
+                    t.occurred_at.isoformat(),
+                    t.account_id,
+                    t.category_id or "",
+                    t.type,
+                    str(t.amount),
+                    t.currency,
+                    t.description or "",
+                ]
+
+        return stream_csv(rows(), filename="transactions.csv")
+
     @action(detail=False, methods=["post"], url_path="transfer")
     def transfer(self, request):
         ser = TransferRequestSerializer(data=request.data, context={"request": request})
