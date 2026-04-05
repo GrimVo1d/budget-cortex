@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "apps.analytics",
     "apps.fx",
     "apps.budgets",
+    "apps.imports",
 ]
 
 MIDDLEWARE = [
