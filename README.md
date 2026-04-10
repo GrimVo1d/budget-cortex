@@ -1,16 +1,16 @@
 # budget-cortex
 
-REST-сервис для учёта личных финансов: счета, транзакции, категории, бюджеты, мультивалютность, импорт банковских CSV-выписок и аналитика поверх PostgreSQL (window functions, CTE, materialized views).
+REST service for personal finance tracking: accounts, transactions, categories, budgets, multi-currency support, CSV bank-statement import, and PostgreSQL-powered analytics (window functions, CTEs, materialized views).
 
-## Зачем
+## Why
 
-Pet-проект, демонстрирующий нетривиальную работу с PostgreSQL: оконные функции (running balance), материализованные представления (месячные сводки), CTE для отчётов, partial-индексы, миграции с историей.
+A pet project that exercises non-trivial PostgreSQL work: window functions (running balance), materialized views (monthly aggregates), CTEs for reports, partial indexes, and migrations with history.
 
-## Стек
+## Stack
 
 Python 3.12 · Django 5 · DRF · PostgreSQL 16 · Redis 7 · Celery 5 · Docker · GitHub Actions
 
-## Быстрый старт (после реализации)
+## Quick start
 
 ```bash
 cp .env.example .env
@@ -21,8 +21,7 @@ docker compose exec api python manage.py createsuperuser
 # OpenAPI: http://localhost:8000/api/schema/swagger-ui/
 ```
 
-## Документация
+## Documentation
 
-- [docs/SPEC.md](docs/SPEC.md) — техническое задание
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — компоненты и потоки данных
-- [docs/ROADMAP.md](docs/ROADMAP.md) — пошаговый план реализации
+- [docs/ANALYTICS.md](docs/ANALYTICS.md) — query catalog (materialized views, recursive CTEs, indexes)
+- [docs/RUNBOOK.md](docs/RUNBOOK.md) — operational playbook
