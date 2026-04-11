@@ -25,9 +25,9 @@ SELECT
     SUM(ABS(t.amount))::numeric(18, 2) AS total_expense,
     COUNT(*)                            AS tx_count
 FROM ledger_transaction t
+JOIN ledger_category c ON c.id = t.category_id
 WHERE t.is_deleted = false
-  AND t.type = 'expense'
-  AND t.category_id IS NOT NULL
+  AND c.kind = 'expense'
 GROUP BY t.user_id, t.category_id, date_trunc('month', t.occurred_at), t.currency
 WITH NO DATA;
 """
@@ -38,14 +38,14 @@ SELECT
     t.user_id,
     date_trunc('month', t.occurred_at) AS month,
     t.currency,
-    SUM(CASE WHEN t.type = 'income'  THEN t.amount      ELSE 0 END)::numeric(18, 2) AS income,
-    SUM(CASE WHEN t.type = 'expense' THEN ABS(t.amount) ELSE 0 END)::numeric(18, 2) AS expense,
-    SUM(CASE WHEN t.type = 'income'  THEN t.amount
-             WHEN t.type = 'expense' THEN -ABS(t.amount)
+    SUM(CASE WHEN c.kind = 'income'  THEN t.amount      ELSE 0 END)::numeric(18, 2) AS income,
+    SUM(CASE WHEN c.kind = 'expense' THEN ABS(t.amount) ELSE 0 END)::numeric(18, 2) AS expense,
+    SUM(CASE WHEN c.kind = 'income'  THEN t.amount
+             WHEN c.kind = 'expense' THEN -ABS(t.amount)
              ELSE 0 END)::numeric(18, 2) AS net
 FROM ledger_transaction t
+JOIN ledger_category c ON c.id = t.category_id
 WHERE t.is_deleted = false
-  AND t.type IN ('income', 'expense')
 GROUP BY t.user_id, date_trunc('month', t.occurred_at), t.currency
 WITH NO DATA;
 """
@@ -61,14 +61,26 @@ ON mv_monthly_cashflow (user_id, month, currency);
 """
 
 
+def _pg_only(sql: str, reverse_sql: str):  # type: ignore[no-untyped-def]
+    def forward(apps, schema_editor):  # type: ignore[no-untyped-def]
+        if schema_editor.connection.vendor == "postgresql":
+            schema_editor.execute(sql)
+
+    def reverse(apps, schema_editor):  # type: ignore[no-untyped-def]
+        if schema_editor.connection.vendor == "postgresql":
+            schema_editor.execute(reverse_sql)
+
+    return migrations.RunPython(forward, reverse)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("ledger", "0004_transaction_brin_occurred_at"),
     ]
 
     operations = [
-        migrations.RunSQL(MV_CATEGORY_TOTALS, reverse_sql="DROP MATERIALIZED VIEW IF EXISTS mv_monthly_category_totals;"),
-        migrations.RunSQL(IDX_CATEGORY, reverse_sql="DROP INDEX IF EXISTS mv_monthly_category_totals_uniq;"),
-        migrations.RunSQL(MV_CASHFLOW, reverse_sql="DROP MATERIALIZED VIEW IF EXISTS mv_monthly_cashflow;"),
-        migrations.RunSQL(IDX_CASHFLOW, reverse_sql="DROP INDEX IF EXISTS mv_monthly_cashflow_uniq;"),
+        _pg_only(MV_CATEGORY_TOTALS, "DROP MATERIALIZED VIEW IF EXISTS mv_monthly_category_totals;"),
+        _pg_only(IDX_CATEGORY, "DROP INDEX IF EXISTS mv_monthly_category_totals_uniq;"),
+        _pg_only(MV_CASHFLOW, "DROP MATERIALIZED VIEW IF EXISTS mv_monthly_cashflow;"),
+        _pg_only(IDX_CASHFLOW, "DROP INDEX IF EXISTS mv_monthly_cashflow_uniq;"),
     ]

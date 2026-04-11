@@ -7,7 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.core.mixins import UserScopedModelViewSet
-from apps.ledger.models import Transaction, TransactionType
+from apps.ledger.models import CategoryKind, Transaction
 
 from .models import Budget
 from .serializers import BudgetSerializer, BudgetStatusSerializer
@@ -27,7 +27,7 @@ class BudgetViewSet(UserScopedModelViewSet):
             user_id=request.user.id,
             occurred_at__gte=budget.period_start,
             occurred_at__lt=budget.period_end,
-            type=TransactionType.EXPENSE,
+            category__kind=CategoryKind.EXPENSE,
             is_deleted=False,
         )
         if budget.category_id is not None:

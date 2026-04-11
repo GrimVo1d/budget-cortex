@@ -51,7 +51,6 @@ def parse_csv_import(self, import_id: int) -> dict[str, int]:  # type: ignore[no
     total = len(rows)
     with transaction.atomic():
         for r in rows:
-            tx_type = TransactionType.EXPENSE if r.amount < 0 else TransactionType.INCOME
             _, created = Transaction.objects.get_or_create(
                 user_id=job.user_id,
                 import_hash=r.raw_hash,
@@ -60,7 +59,7 @@ def parse_csv_import(self, import_id: int) -> dict[str, int]:  # type: ignore[no
                     "occurred_at": r.occurred_at,
                     "amount": r.amount,
                     "currency": r.currency,
-                    "type": tx_type,
+                    "type": TransactionType.REGULAR,
                     "description": r.description,
                 },
             )
