@@ -1,89 +1,116 @@
 x-app-env: &app-env
   DJANGO_SETTINGS_MODULE: budget_cortex.settings.dev
   SECRET_KEY: ${SECRET_KEY:-dev-insecure-change-me}
+  JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-dev-insecure-jwt-signing-key-change-me}
   DEBUG: ${DEBUG:-1}
-  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
-  DATABASE_URL: postgres://bc:bc@db:5432/budget_cortex
-  REDIS_URL: redis://redis:6379/0
-  CELERY_BROKER_URL: redis://redis:6379/1
-  CELERY_RESULT_BACKEND: redis://redis:6379/2
-  JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-dev-insecure-jwt}
+  DATABASE_URL: postgres://${POSTGRES_USER:-bc}:${POSTGRES_PASSWORD:-bc}@db:5432/${POSTGRES_DB:-budget_cortex}
+  REDIS_URL: redis://:${REDIS_PASSWORD:-bc}@redis:6379/0
+  CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-bc}@redis:6379/1
+  CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-bc}@redis:6379/2
   FX_PROVIDER: ${FX_PROVIDER:-stub}
   FX_BASE_CURRENCY: ${FX_BASE_CURRENCY:-RUB}
   MEDIA_ROOT: /app/media
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   LOG_FORMAT: ${LOG_FORMAT:-json}
 
-x-app-build: &app-build
+x-app: &app
   build:
     context: .
     dockerfile: docker/Dockerfile
+    target: runtime
   image: budget-cortex:dev
   restart: unless-stopped
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
   depends_on:
     db:
       condition: service_healthy
     redis:
       condition: service_healthy
+  environment:
+    <<: *app-env
   volumes:
     - media:/app/media
 
 services:
   api:
-    <<: *app-build
+    <<: *app
     command: ["api"]
-    environment:
-      <<: *app-env
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/live"]
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=2)"
       interval: 15s
       timeout: 3s
       retries: 5
       start_period: 20s
 
   worker:
-    <<: *app-build
-    command: ["worker", "default"]
-    environment:
-      <<: *app-env
-      CELERY_CONCURRENCY: "4"
+    <<: *app
+    command: ["worker"]
 
   beat:
-    <<: *app-build
+    <<: *app
     command: ["beat"]
-    environment:
-      <<: *app-env
 
   db:
-    image: postgres:16.2-alpine
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: bc
-      POSTGRES_PASSWORD: bc
-      POSTGRES_DB: budget_cortex
+      POSTGRES_USER: ${POSTGRES_USER:-bc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bc}
+      POSTGRES_DB: ${POSTGRES_DB:-budget_cortex}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bc -d budget_cortex"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
       timeout: 3s
       retries: 10
 
   redis:
-    image: redis:7.2-alpine
+    image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --requirepass
+      - ${REDIS_PASSWORD:-bc}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-bc}
+
+  # Linters and tests: `make lint`, `make test`. Not started by `up`.
+  tools:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: dev
+    image: budget-cortex:tools
+    profiles: ["tools"]
+    entrypoint: []
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      DJANGO_SETTINGS_MODULE: budget_cortex.settings.test
+      PG_TEST_DATABASE_URL: postgres://${POSTGRES_USER:-bc}:${POSTGRES_PASSWORD:-bc}@db:5432/${POSTGRES_DB:-budget_cortex}
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   pgdata:

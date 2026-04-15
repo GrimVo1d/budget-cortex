@@ -1,0 +1,15 @@
+.git
+*.md
+.env
+.env.*
+!.env.example
+.venv
+**/__pycache__
+.mypy_cache
+.ruff_cache
+.pytest_cache
+.coverage
+htmlcov
+media
+staticfiles
+*.bundle

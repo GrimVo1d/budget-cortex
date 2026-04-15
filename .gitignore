@@ -1,49 +1,47 @@
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
+*.egg-info/
+build/
+dist/
 
+# Virtualenvs
 .venv/
 venv/
-env/
 
+# Tool caches and reports
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
 .coverage
 htmlcov/
 
-*.log
-local_settings.py
+# Django / Celery runtime files
 db.sqlite3
-staticfiles/
 media/
+staticfiles/
+celerybeat-schedule*
+*.log
 
+# Local configuration and secrets
 .env
 .env.*
 !.env.example
+docker-compose.override.yml
+*.pem
+*.key
+*.p12
 
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.vim/
-*.code-workspace
-
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# pgadmin dev artifacts
-.pgadmin/
-pgdata-local/
+# Database dumps
 *.dump
 *.sql.gz
 
-build/
-dist/
-*.egg-info/
+# Git bundles (backups)
+*.bundle
 
-docker-compose.override.yml
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
