@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from decimal import Decimal
+from typing import Any
 
 from django.conf import settings
 from django.db import models
@@ -17,11 +17,12 @@ class CategoryQuerySet(models.QuerySet["Category"]):
 
 
 class Category(models.Model):
-    """Two-level category hierarchy (parent → child, max depth 1).
+    """Two-level category hierarchy (root → child, max depth 1).
 
-    `parent` is a self-FK; serializer-level validation refuses deeper nesting.
-    A user can have system-defined categories (`is_system=True`) which are
-    seeded via data migration and shared across the catalogue.
+    ``parent`` is a self-FK; serializer-level validation refuses deeper
+    nesting. ``kind`` decides whether a transaction counts as income or
+    expense in reports. ``is_system`` is reserved for categories created by
+    the application itself and is read-only over the API.
     """
 
     user = models.ForeignKey(
@@ -51,6 +52,12 @@ class Category(models.Model):
                 fields=["user", "parent", "name"],
                 condition=models.Q(is_deleted=False),
                 name="category_unique_alive_per_parent",
+            ),
+            # NULLs are distinct in a unique index, so roots need their own rule.
+            models.UniqueConstraint(
+                fields=["user", "name"],
+                condition=models.Q(is_deleted=False, parent__isnull=True),
+                name="category_unique_alive_root",
             ),
         ]
         indexes = [
@@ -93,13 +100,13 @@ class Tag(models.Model):
         ]
         ordering = ["name"]
 
-    def save(self, *args, **kwargs) -> None:
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
         # Normalise to lowercase before write.
         self.name = self.name.strip().lower()
         super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        return self.name
 
 
 class TransactionType(models.TextChoices):
@@ -149,8 +156,9 @@ class Transaction(models.Model):
         blank=True,
         related_name="+",
     )
-    external_id = models.CharField(max_length=128, null=True, blank=True)
-    import_hash = models.CharField(max_length=64, null=True, blank=True)
+    # NULL (not "") means "absent": the partial indexes below rely on it.
+    external_id = models.CharField(max_length=128, null=True, blank=True)  # noqa: DJ001
+    import_hash = models.CharField(max_length=64, null=True, blank=True)  # noqa: DJ001
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -192,10 +200,6 @@ class Transaction(models.Model):
             ),
         ]
         ordering = ["-occurred_at", "-id"]
-
-    @property
-    def signed_amount(self) -> Decimal:
-        return self.amount
 
     def __str__(self) -> str:
         return f"{self.amount} {self.currency} on {self.occurred_at:%Y-%m-%d}"

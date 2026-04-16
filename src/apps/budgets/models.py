@@ -1,10 +1,10 @@
 """Spending limit for a (category, period) tuple.
 
 Storage uses two ``timestamptz`` columns ``period_start`` / ``period_end``
-exposed as a half-open range ``[start, end)``. On PostgreSQL a GIST index
-over ``tstzrange(period_start, period_end)`` is added in a follow-up
-migration so overlap-style queries (`&&`) are index-backed; on SQLite the
-fallback is a plain B-tree.
+treated as a half-open range ``[start, end)``. On PostgreSQL migration 0002
+adds a GiST exclusion constraint over ``tstzrange(period_start, period_end)``
+so two live budgets for the same (user, category, currency) can never
+overlap; the serializer runs the same check portably for a clean 400.
 """
 
 from __future__ import annotations
@@ -55,8 +55,8 @@ class Budget(models.Model):
                 name="budget_user_cat_alive_idx",
                 condition=models.Q(is_deleted=False),
             ),
-            # Plain B-tree fallback for cross-DB compatibility. The PG-only
-            # GIST overlap index is added by a follow-up RunSQL migration.
+            # Portable B-tree for range scans; the PG-only GiST exclusion
+            # constraint lives in migration 0002.
             models.Index(
                 fields=["period_start", "period_end"],
                 name="budget_period_range_idx",

@@ -13,10 +13,14 @@ from datetime import datetime
 from decimal import Decimal
 
 from django.db import transaction
+from django.utils import timezone
 
 from apps.accounts.models import Account
 
 from .models import Transaction, TransactionType
+
+# Transaction.amount is NUMERIC(14, 2).
+_MAX_AMOUNT = Decimal("1e12")
 
 
 class TransferError(Exception):
@@ -48,12 +52,20 @@ def create_transfer(req: TransferRequest) -> tuple[Transaction, Transaction]:
         raise TransferError("both accounts must belong to the requesting user")
 
     cross_currency = req.from_account.currency != req.to_account.currency
-    if cross_currency and req.fx_rate is None:
-        raise TransferError(
-            f"fx_rate is required for cross-currency transfer "
-            f"({req.from_account.currency} → {req.to_account.currency})"
-        )
-    credit_amount = req.amount * req.fx_rate if cross_currency else req.amount
+    credit_amount = req.amount
+    if cross_currency:
+        if req.fx_rate is None:
+            raise TransferError(
+                f"fx_rate is required for cross-currency transfer "
+                f"({req.from_account.currency} → {req.to_account.currency})"
+            )
+        if req.fx_rate <= Decimal("0"):
+            raise TransferError("fx_rate must be positive")
+        credit_amount = (req.amount * req.fx_rate).quantize(Decimal("0.01"))
+        if credit_amount <= Decimal("0"):
+            raise TransferError("converted amount rounds to zero")
+        if credit_amount >= _MAX_AMOUNT:
+            raise TransferError("converted amount is too large")
 
     with transaction.atomic():
         debit = Transaction.objects.create(
@@ -79,3 +91,15 @@ def create_transfer(req: TransferRequest) -> tuple[Transaction, Transaction]:
         debit.transfer_pair = credit
         debit.save(update_fields=["transfer_pair", "updated_at"])
     return debit, credit
+
+
+def delete_transfer(leg: Transaction) -> None:
+    """Soft-delete both legs of a transfer together."""
+    now = timezone.now()
+    with transaction.atomic():
+        for tx in (leg, leg.transfer_pair):
+            if tx is None or tx.is_deleted:
+                continue
+            tx.is_deleted = True
+            tx.deleted_at = now
+            tx.save(update_fields=["is_deleted", "deleted_at", "updated_at"])

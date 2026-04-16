@@ -7,6 +7,5 @@ class CoreConfig(AppConfig):
     label = "core"
 
     def ready(self) -> None:
-        # Importing the module wires up the post_save/post_delete signal
-        # handlers that populate the audit log.
-        from . import audit  # noqa: F401
+        # Importing the module connects the audit-log signal handlers.
+        from . import audit  # noqa: F401, PLC0415

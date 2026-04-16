@@ -1,6 +1,8 @@
-"""Per-request middleware: bind the authenticated user to a thread-local
-so audit-log signal handlers can attribute writes without plumbing the
-user kwarg through every service.
+"""Bind the session-authenticated user (admin) as the audit actor.
+
+DRF/JWT requests are authenticated later, inside the view; see
+:class:`apps.core.audit.AuditActorMixin`. Resetting the context var here
+also discards whatever the view set, so nothing leaks between requests.
 """
 
 from __future__ import annotations
@@ -9,7 +11,7 @@ from collections.abc import Callable
 
 from django.http import HttpRequest, HttpResponse
 
-from .audit import clear_actor, set_actor
+from .audit import reset_actor, set_actor
 
 
 class AuditMiddleware:
@@ -18,9 +20,9 @@ class AuditMiddleware:
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         user = getattr(request, "user", None)
-        if user is not None and user.is_authenticated:
-            set_actor(user.id)
+        actor = user.pk if user is not None and user.is_authenticated else None
+        token = set_actor(actor)
         try:
             return self.get_response(request)
         finally:
-            clear_actor()
+            reset_actor(token)

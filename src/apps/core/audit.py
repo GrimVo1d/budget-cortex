@@ -1,105 +1,107 @@
-"""Application-side audit log.
+"""Application-side audit log recorder.
 
-Captures create/update/delete events for ``Account``, ``Transaction``, and
-``Budget``. The actor is sourced from a thread-local set by
-:class:`AuditMiddleware` so signal handlers can attribute writes without
-plumbing a user kwarg through every service.
+Every save/delete of an audited model writes an :class:`AuditLog` row with
+before/after snapshots. A soft delete (``is_deleted`` flipping to true) is
+recorded as ``delete``.
 
-This is intentionally NOT a triggers-on-the-database solution — keeping the
-recorder in Python lets us include serializer-level intent (`reason`) and
-swap the storage backend (e.g. write-once to S3) later without DDL.
+The actor lives in a :class:`~contextvars.ContextVar` so it is safe under
+threads and async alike. :class:`AuditMiddleware` sets it for session-based
+requests (admin); DRF views set it after their own authentication via
+:class:`AuditActorMixin`, because JWT is only resolved inside the view.
 """
 
 from __future__ import annotations
 
-import threading
+import json
+from contextvars import ContextVar, Token
 from typing import Any
 
-from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
-from django.forms.models import model_to_dict
+from rest_framework.request import Request
 
-_local = threading.local()
+from .models import AuditAction, AuditLog
+
+AUDITED_MODELS = frozenset(
+    {"accounts.Account", "ledger.Category", "ledger.Transaction", "budgets.Budget"}
+)
+
+_actor: ContextVar[int | None] = ContextVar("audit_actor", default=None)
 
 
-def set_actor(user_id: int | None) -> None:
-    _local.actor_id = user_id
+def set_actor(user_id: int | None) -> Token[int | None]:
+    return _actor.set(user_id)
+
+
+def reset_actor(token: Token[int | None]) -> None:
+    _actor.reset(token)
 
 
 def get_actor() -> int | None:
-    return getattr(_local, "actor_id", None)
+    return _actor.get()
 
 
-def clear_actor() -> None:
-    _local.actor_id = None
+class AuditActorMixin:
+    """Bind the DRF-authenticated user as the audit actor for this request."""
+
+    def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
+        super().initial(request, *args, **kwargs)  # type: ignore[misc]
+        if request.user.is_authenticated:
+            set_actor(request.user.pk)
 
 
-class AuditAction(models.TextChoices):
-    CREATE = "create", "Create"
-    UPDATE = "update", "Update"
-    DELETE = "delete", "Delete"
+def _is_audited(sender: type[models.Model]) -> bool:
+    return sender._meta.label in AUDITED_MODELS
 
 
-class AuditLog(models.Model):
-    actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
+def snapshot(instance: models.Model) -> dict[str, Any]:
+    """JSON-safe dict of the instance's concrete column values."""
+    raw = {f.attname: getattr(instance, f.attname) for f in instance._meta.concrete_fields}
+    result: dict[str, Any] = json.loads(json.dumps(raw, cls=DjangoJSONEncoder))
+    return result
+
+
+def _record(
+    instance: models.Model, action: str, before: dict[str, Any], after: dict[str, Any]
+) -> None:
+    AuditLog.objects.create(
+        actor_id=get_actor(),
+        model=instance._meta.label,
+        object_id=str(instance.pk),
+        action=action,
+        before=before,
+        after=after,
     )
-    model = models.CharField(max_length=64)
-    object_id = models.CharField(max_length=64)
-    action = models.CharField(max_length=16, choices=AuditAction.choices)
-    before = models.JSONField(default=dict, blank=True)
-    after = models.JSONField(default=dict, blank=True)
-    at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        indexes = [
-            models.Index(fields=["model", "object_id"], name="audit_model_obj_idx"),
-            models.Index(fields=["actor", "-at"], name="audit_actor_at_idx"),
-        ]
-        ordering = ["-at"]
 
 
-def _serialise(instance: Any) -> dict[str, Any]:
-    raw = model_to_dict(instance)
-    # JSONField requires JSON-able primitives; cast Decimal/datetime via str.
-    return {
-        k: str(v) if v is not None and not isinstance(v, (int, bool, str)) else v
-        for k, v in raw.items()
-    }
-
-
-_AUDITED_MODELS = {"Account", "Transaction", "Budget"}
+@receiver(pre_save)
+def _capture_before(sender: type[models.Model], instance: models.Model, **kwargs: Any) -> None:
+    if not _is_audited(sender) or instance.pk is None:
+        return
+    previous = sender._base_manager.filter(pk=instance.pk).first()
+    instance._audit_before = snapshot(previous) if previous is not None else {}  # type: ignore[attr-defined]
 
 
 @receiver(post_save)
-def _record_save(sender, instance, created, **kwargs):
-    if sender.__name__ not in _AUDITED_MODELS:
+def _record_save(
+    sender: type[models.Model], instance: models.Model, created: bool, **kwargs: Any
+) -> None:
+    if not _is_audited(sender):
         return
-    AuditLog.objects.create(
-        actor_id=get_actor(),
-        model=sender.__name__,
-        object_id=str(instance.pk),
-        action=AuditAction.CREATE if created else AuditAction.UPDATE,
-        before={},  # before-state requires fetching pre-save row; left empty for v1
-        after=_serialise(instance),
-    )
+    before: dict[str, Any] = getattr(instance, "_audit_before", {})
+    after = snapshot(instance)
+    if created:
+        action = AuditAction.CREATE
+    elif after.get("is_deleted") and not before.get("is_deleted", False):
+        action = AuditAction.DELETE
+    else:
+        action = AuditAction.UPDATE
+    _record(instance, action, before, after)
 
 
 @receiver(post_delete)
-def _record_delete(sender, instance, **kwargs):
-    if sender.__name__ not in _AUDITED_MODELS:
-        return
-    AuditLog.objects.create(
-        actor_id=get_actor(),
-        model=sender.__name__,
-        object_id=str(instance.pk),
-        action=AuditAction.DELETE,
-        before=_serialise(instance),
-        after={},
-    )
+def _record_delete(sender: type[models.Model], instance: models.Model, **kwargs: Any) -> None:
+    if _is_audited(sender):
+        _record(instance, AuditAction.DELETE, snapshot(instance), {})
