@@ -1,30 +1,37 @@
-# ADR-0004: Multi-currency normalization at occurrence time
+# ADR-0004: Native currency per transaction, rates by date
 
 **Status:** Accepted
 **Date:** 2026-04-10
 
 ## Context
 
-Transactions carry their native currency (RUB, USD, EUR, ...). Reports and budgets often need a single comparable amount. The question is *when* to apply the FX rate.
+Accounts and transactions carry a currency (RUB, USD, EUR, …). Some features want
+comparable numbers across currencies. The question is what to store and which rate to
+use.
 
 ## Decision
 
-Store amounts in their **native** currency on `Transaction`. Whenever we need a normalized value, look up the FX rate **at `occurred_at`**, not at query time:
-
-```python
-rate = get_rate(base=tx.currency, quote="RUB", on=tx.occurred_at.date())
-normalized = tx.amount * rate
-```
-
-`apps.fx.services.get_rate` checks Redis (24h TTL) → DB (`FxRate(base, quote, effective_on)`) → provider. The provider abstraction has a `stub` and is wired to swap for a real one. Cache failures fall back to DB; provider failures fall back to the most recent DB rate.
+- Store every amount in its **native** currency. Reports and budgets group by currency
+  instead of mixing them.
+- A cross-currency transfer takes the rate from the client and stores the converted,
+  cent-quantized amount on the credit leg, so the rate actually used stays in the ledger.
+- Rates are kept **per day** in `FxRate(base, quote, effective_on)`.
+  `apps.fx.services.get_rate(base, quote, on)` looks in the Django cache (24 h), then the
+  table, then the configured provider, whose answer is stored and cached. A cache outage
+  degrades to database lookups; an unknown pair returns `None`.
+- A daily beat task stores today's rate to `FX_BASE_CURRENCY` for every currency in use.
+  Any future conversion uses the rate of the transaction's date, not of the query date.
 
 ## Consequences
 
-**+** Historical reports are deterministic. Re-running a "2026-01 cashflow" tomorrow returns the same number as today, regardless of FX moves.
-**+** Cross-currency transfers persist their FX rate at the moment of the transfer; same logic.
-**−** A grace period is needed for the FX provider to publish today's rate before today's reports stabilize. Documented in RUNBOOK.
+**+** Historical numbers do not move when rates change.
+**+** The native amount the user saw is never lost.
+**−** No report converts between currencies yet; totals in several currencies are
+reported side by side.
+**−** Only the `stub` provider (fixed rates) ships; a real provider is one more class
+behind `get_provider()`.
 
 ## Alternatives
 
-- **Apply current rate at query time.** Historical reports would shift retroactively — confusing for users and unauditable.
-- **Store only normalized amounts.** Loses information; can't render the native amount as the user saw it.
+- **Convert at query time with the current rate.** Past reports would change every day.
+- **Store only converted amounts.** Loses the original amount and currency.

@@ -1,28 +1,41 @@
-# ADR-0003: Soft-delete + custom audit log
+# ADR-0003: Soft delete and an application audit log
 
 **Status:** Accepted
 **Date:** 2026-04-10
 
 ## Context
 
-A finance app cannot lose history. Users will delete accounts, recategorize transactions, edit budgets — and we need to be able to answer "who changed what, when" months later, including for entities the user "removed".
+A finance ledger should not lose history. Users delete accounts, recategorize
+transactions and edit budgets, and later it should still be possible to answer who
+changed what and when, including for rows the user removed.
 
 ## Decision
 
-Two complementary mechanisms:
-
-1. **Soft delete.** Every mutable model has `is_deleted: bool` + `deleted_at: timestamptz`. Querysets expose `.alive()`; the user-scoped viewset mixin calls it automatically. `DELETE` endpoints flip the flag instead of issuing SQL `DELETE`.
-2. **Audit log.** A single `audit_log` table receives a row for every create/update/delete of `Account`, `Transaction`, `Budget`, captured by Django `post_save`/`post_delete` signals. Actor attribution flows through a thread-local set by `AuditMiddleware` from `request.user.id`, so service code doesn't have to plumb `actor=` everywhere.
+1. **Soft delete.** Every user-owned model has `is_deleted` and `deleted_at`.
+   `UserScopedModelViewSet` filters `is_deleted = false` and turns `DELETE` into a flag
+   update. Deleting either leg of a transfer soft-deletes both. Uniqueness constraints and
+   hot indexes are partial (`WHERE NOT is_deleted`), so deleted rows neither block names
+   nor bloat indexes.
+2. **Audit log.** `core.AuditLog` gets a row for every create, update and delete of
+   accounts, categories, transactions and budgets, written by `pre_save` / `post_save` /
+   `post_delete` receivers with JSON snapshots before and after. A soft delete is
+   recorded as `delete`. The actor is a `ContextVar`: the API binds the authenticated user
+   after DRF authentication, Celery tasks bind the user they act for, so service code
+   does not pass `actor=` around.
 
 ## Consequences
 
-**+** History is preserved without trusting application code to remember.
-**+** Restoring a "deleted" entity is `is_deleted=False`.
-**+** Audit completeness doesn't depend on every service layer remembering to log.
-**−** Foreign keys must respect `is_deleted` everywhere — encapsulated in querysets.
-**−** Indexes need partial predicates (`WHERE is_deleted=false`) to stay compact.
+**+** History survives deletes; restoring a row is clearing the flag.
+**+** Audit completeness does not depend on each code path remembering to log.
+**−** Every query must exclude deleted rows; this is centralized in the viewset mixin
+and the owner-restricted querysets.
+**−** `QuerySet.update()` and `bulk_create()` bypass signals and therefore the audit
+log; they are not used on audited models.
+**−** The log is only as tamper-proof as the database role that writes it.
 
 ## Alternatives
 
-- **`django-simple-history`.** Stores entire row snapshots — heavy. We only need who/when/what-changed.
-- **Hard delete + change-data-capture from PG WAL.** Overkill for a single-tenant pet project.
+- **django-simple-history.** Full history tables per model: more storage and migrations
+  than a who/what/when log needs.
+- **Change data capture from the PostgreSQL WAL.** Complete, but heavy infrastructure for
+  a single-instance project.

@@ -5,27 +5,33 @@
 
 ## Context
 
-Every amount in the ledger is money. Floating-point arithmetic is unsuitable: `0.1 + 0.2 = 0.30000000000000004`, rounding modes are platform-dependent, and cumulative errors grow with the number of operations.
+Every amount in the ledger is money. Binary floating point cannot represent most decimal
+fractions (`0.1 + 0.2 = 0.30000000000000004`), and the error accumulates across sums.
 
 ## Decision
 
-All monetary fields use `Decimal` end-to-end:
+Money is a decimal value end to end:
 
-- DB: `NUMERIC(14, 2)` for amounts, `NUMERIC(20, 10)` for FX rates.
-- Models: `models.DecimalField(max_digits=14, decimal_places=2)`.
-- Python: `decimal.Decimal` everywhere, never `float`.
-- DRF: serializers default to string output for decimals (`COERCE_DECIMAL_TO_STRING=True`) so JSON clients don't silently widen to IEEE 754.
+- Database: `NUMERIC(14, 2)` for amounts and limits, `NUMERIC(20, 10)` for FX rates;
+  report aggregates are cast to `NUMERIC(18, 2)`.
+- Models: `DecimalField`; Python code uses `decimal.Decimal`, never `float`.
+- Converted amounts (cross-currency transfers) are quantized to cents explicitly.
+- API: DRF keeps its default `COERCE_DECIMAL_TO_STRING`, so JSON carries `"12.50"`
+  and clients do not silently widen to IEEE 754.
+- Raw SQL that can come back as float on SQLite (window sums) is quantized back to cents.
 
-The opening balance + signed `amount` columns (negative = outflow, positive = inflow) is summed with `SUM() OVER (...)`, never multiplied by a float.
+Amounts are signed: negative is an outflow. Balances are sums of signed amounts plus the
+account's opening balance.
 
 ## Consequences
 
-**+** Exact arithmetic; reproducible across CI/local/prod.
-**+** No silent precision loss when serializing to JSON.
-**−** Slower than native float (roughly 50x), irrelevant at our volume.
-**−** ORM annotations need `output_field=DecimalField(...)` explicitly when mixing.
+**+** Exact arithmetic, the same results on PostgreSQL and SQLite.
+**+** No precision loss when serializing to JSON.
+**−** Decimal arithmetic is slower than float, irrelevant at this volume.
+**−** Two decimal places fit most currencies but not the three-decimal ones (KWD, BHD).
 
 ## Alternatives
 
-- **Integer cents.** Compact but loses currency exponent (some currencies use 3 decimals, e.g. KWD/BHD).
-- **Float.** Disqualified by the context.
+- **Integer minor units.** Compact and exact, but every boundary has to know the
+  currency's exponent; `NUMERIC` keeps that out of the code.
+- **Float.** Ruled out by the context.
