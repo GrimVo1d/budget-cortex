@@ -125,3 +125,12 @@ def test_cleanup_fails_stale_pending_jobs_and_removes_files(user: Any, account: 
     job.refresh_from_db()
     assert job.status == ImportStatus.FAILED
     assert not Path(job.file_path).exists()
+
+
+def test_row_in_another_currency_fails_the_whole_job(user: Any, account: Any) -> None:
+    content = "date,amount,currency\n2026-04-01,-5.00,RUB\n2026-04-02,-7.00,USD\n"
+    parse_csv_import(_job(user, account, content).pk)
+    job = CsvImport.objects.get()
+    assert job.status == ImportStatus.FAILED
+    assert job.error == "row 2: currency USD does not match the account (RUB)"
+    assert not Transaction.objects.exists()

@@ -60,7 +60,9 @@ FxRate (base, quote, effective_on)          AuditLog (actor → User)
 - `Budget` covers the half-open range `[period_start, period_end)` in one currency, for one
   category (children included) or for all categories when `category` is null
   ([ADR-0005](ADR/0005-budget-period-range.md)).
-- Transactions keep their native currency; reports group by currency instead of
+- A transaction is always in its account's currency (the API and the CSV import reject
+  anything else), so the running balance can sum amounts as they are. Money moves between
+  currencies only through a transfer. Reports group by currency instead of
   converting ([ADR-0004](ADR/0004-multi-currency-normalization.md)).
 
 ## Request handling
@@ -277,7 +279,5 @@ rate from the client and store the converted amount on the credit leg.
 - Report data can be up to an hour old (refresh schedule); budget status is live.
 - Budgets and the category MV only see categorized transactions of `expense` kind, so
   imported rows count toward budgets once they are categorized.
-- A transaction's currency is not checked against its account's currency. The running
-  balance sums the amounts as they are, so it assumes they match.
 - Currency codes are checked for shape (three uppercase letters), not against ISO 4217.
 - The audit log has no API; read it from the database or the Django shell.

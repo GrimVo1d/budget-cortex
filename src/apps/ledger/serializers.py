@@ -135,6 +135,14 @@ class TransactionSerializer(serializers.ModelSerializer[Transaction]):
             raise serializers.ValidationError(
                 "transfer legs cannot be edited; delete the transfer and create a new one"
             )
+        # The running balance sums amounts as they are, so they must be in the
+        # account's currency. Cross-currency moves go through /transfer/.
+        account = attrs.get("account") or getattr(self.instance, "account", None)
+        currency = attrs.get("currency") or getattr(self.instance, "currency", None)
+        if account is not None and currency is not None and currency != account.currency:
+            raise serializers.ValidationError(
+                {"currency": f"must match the account currency ({account.currency})"}
+            )
         return attrs
 
 

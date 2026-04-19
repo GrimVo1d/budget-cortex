@@ -123,8 +123,8 @@ class TransactionQuerySet(models.QuerySet["Transaction"]):
 class Transaction(models.Model):
     """One movement of money on a single account.
 
-    Signed ``amount`` (positive = income, negative = expense). Currency may
-    differ from the account's (relevant for cross-currency transfers).
+    Signed ``amount`` (positive = income, negative = expense) in the account's
+    currency; a cross-currency transfer stores each leg in its own account's.
     ``transfer_pair`` links the two legs of an inter-account transfer.
     """
 

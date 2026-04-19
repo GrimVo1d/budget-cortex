@@ -53,6 +53,13 @@ def parse_csv_import(import_id: int) -> dict[str, int]:
         logger.exception("csv_import_unreadable", extra={"import_id": import_id})
         return _fail(job, "uploaded file is not readable")
 
+    expected = job.account.currency
+    for n, r in enumerate(rows, start=1):
+        if r.currency is not None and r.currency != expected:
+            return _fail(
+                job, f"row {n}: currency {r.currency} does not match the account ({expected})"
+            )
+
     inserted = 0
     # Rows are created on the owner's behalf, so the audit log names them.
     actor = set_actor(job.user_id)
@@ -66,7 +73,7 @@ def parse_csv_import(import_id: int) -> dict[str, int]:
                         "account_id": job.account_id,
                         "occurred_at": r.occurred_at,
                         "amount": r.amount,
-                        "currency": r.currency or job.account.currency,
+                        "currency": expected,
                         "type": TransactionType.REGULAR,
                         "description": r.description,
                     },

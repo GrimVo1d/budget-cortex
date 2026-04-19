@@ -11,7 +11,8 @@ use.
 
 ## Decision
 
-- Store every amount in its **native** currency. Reports and budgets group by currency
+- Store every amount in its **native** currency, which is always the account's currency:
+  a transaction in another currency is rejected. Reports and budgets group by currency
   instead of mixing them.
 - A cross-currency transfer takes the rate from the client and stores the converted,
   cent-quantized amount on the credit leg, so the rate actually used stays in the ledger.

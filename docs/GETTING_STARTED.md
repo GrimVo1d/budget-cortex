@@ -129,7 +129,8 @@ by `-occurred_at` by default; `ordering` accepts other fields and always ends wi
 | `tinkoff`  | `;`-separated: `DD.MM.YYYY HH:MM:SS;amount;currency;description`, decimal comma allowed. The first line is a header and is skipped. |
 | `sberbank` | `DD.MM.YYYY,amount,description`, always RUB. The first line is a header and is skipped. |
 
-Rows without a currency take the account's currency. Times without a zone are UTC.
+Rows without a currency take the account's currency; a row in another currency fails the
+whole job. Times without a zone are UTC.
 Re-uploading the same file returns `409 duplicate_file`, unless its earlier import
 failed: then the same job is retried. An overlapping statement only inserts the lines
 that are new. Files over `IMPORT_MAX_BYTES` get `413`. A job that stays `pending` for a

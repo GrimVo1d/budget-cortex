@@ -275,3 +275,22 @@ def test_equal_timestamps_are_ordered_by_id(client: APIClient, user: Any) -> Non
 
     rows = client.get(TX, {"ordering": "-occurred_at"}).json()["results"]
     assert [r["id"] for r in rows] == ids[::-1]
+
+
+def test_transaction_currency_must_match_its_account(client: APIClient, user: Any) -> None:
+    rub = make_account(user)
+    usd = make_account(user, currency="USD")
+    body = {
+        "account": rub.pk,
+        "amount": "-5.00",
+        "currency": "USD",
+        "occurred_at": "2026-04-01T00:00:00Z",
+    }
+    resp = client.post(TX, body, format="json")
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["currency"] == ["must match the account currency (RUB)"]
+
+    tx = make_tx(rub, "-5.00", datetime(2026, 4, 1, tzinfo=UTC))
+    moved = client.patch(f"{TX}{tx.pk}/", {"account": usd.pk}, format="json")
+    assert moved.status_code == 400
+    assert "currency" in moved.json()["detail"]
