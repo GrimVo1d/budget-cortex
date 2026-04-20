@@ -173,6 +173,7 @@ from `ledger_transaction`.
 | `budget_period_range_idx` | partial B-tree | portable range scans on budget periods |
 | `category_unique_alive_per_parent`, `category_unique_alive_root`, `tag_unique_alive_per_user` | partial unique | names unique among live rows only; root categories need their own constraint because `NULL` parents never compare equal |
 | `mv_*_uniq` | unique on each MV | required for concurrent refresh |
+| `auditlog_append_only` | `BEFORE UPDATE OR DELETE` row trigger (PostgreSQL only) | audit rows cannot be changed or removed; the only update allowed is `actor_id` → `NULL` when the user is deleted |
 
 The exclusion constraint:
 
@@ -245,7 +246,7 @@ rate from the client and store the converted amount on the credit leg.
 | Injection | spreadsheet formula injection via export | text cells starting with `= + - @`, tab, CR or LF, also after leading spaces, are prefixed with `'` |
 | Uploads | path traversal, oversized files | server-generated names, path confinement in the worker, size limit checked before the body is read, per-user dedup by hash |
 | Availability | throttle bypass | client address taken from the socket; `X-Forwarded-For` trusted only for `NUM_PROXIES` hops |
-| Integrity | silent edits | audit log with before/after snapshots and actor for accounts, categories, transactions and budgets; transfer legs cannot be edited |
+| Integrity | silent edits | audit log with before/after snapshots and actor for accounts, categories, transactions and budgets, append-only through a database trigger; transfer legs cannot be edited |
 | Integrity | half-written transfers | both legs in one database transaction; cross-currency transfers require a positive rate |
 | Configuration | default or missing secrets in production | `settings.prod` refuses short, `dev-insecure*` or shared keys and a missing `ALLOWED_HOSTS`, `DATABASE_URL`, `REDIS_URL` or Celery URL |
 | Information disclosure | API surface mapping | in `prod` the OpenAPI schema and Swagger UI are served to staff users only; Swagger UI assets are pinned to one version; JSON logs carry the request path without the query string |
@@ -255,9 +256,10 @@ rate from the client and store the converted amount on the credit leg.
 
 ### Accepted risks
 
-- The audit log is written by the application role; there is no append-only database role
-  or trigger, so someone with database access can alter it. `QuerySet.update()` and
-  `bulk_create()` bypass signals; the code does not use them on audited models.
+- The append-only trigger guards against the application, not against the database owner:
+  the application role owns the table, so it can still `TRUNCATE` it (test teardown does)
+  or drop the trigger. `QuerySet.update()` and `bulk_create()` bypass signals, so they
+  would skip the log; the code does not use them on audited models.
 - The application connects to PostgreSQL as the database owner; a separate low-privilege
   role would need an init script.
 - Registration reveals whether a username exists (unavoidable with open sign-up); the auth

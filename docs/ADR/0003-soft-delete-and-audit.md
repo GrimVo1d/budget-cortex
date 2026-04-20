@@ -21,7 +21,8 @@ changed what and when, including for rows the user removed.
    `post_delete` receivers with JSON snapshots before and after. A soft delete is
    recorded as `delete`. The actor is a `ContextVar`: the API binds the authenticated user
    after DRF authentication, Celery tasks bind the user they act for, so service code
-   does not pass `actor=` around.
+   does not pass `actor=` around. On PostgreSQL a row trigger makes the table
+   append-only: `UPDATE` and `DELETE` fail, except the `ON DELETE SET NULL` of the actor.
 
 ## Consequences
 
@@ -31,7 +32,8 @@ changed what and when, including for rows the user removed.
 and the owner-restricted querysets.
 **−** `QuerySet.update()` and `bulk_create()` bypass signals and therefore the audit
 log; they are not used on audited models.
-**−** The log is only as tamper-proof as the database role that writes it.
+**−** The trigger stops the application from rewriting history, but not the database
+owner, which can truncate the table or drop the trigger.
 
 ## Alternatives
 

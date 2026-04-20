@@ -18,6 +18,7 @@ from apps.analytics.queries.by_category import by_category_report
 from apps.analytics.queries.cashflow import cashflow_report
 from apps.analytics.queries.overruns import overruns_report
 from apps.budgets.models import Budget, BudgetPeriod
+from apps.core.models import AuditAction, AuditLog
 from apps.ledger.services import TransferRequest, create_transfer
 from tasks.analytics import refresh_materialized_views
 from tests.factories import make_account, make_category, make_tx
@@ -175,3 +176,21 @@ def test_pg_only_indexes_exist() -> None:
         )
         indexes = dict(cur.fetchall())
     assert "USING brin" in indexes["tx_occurred_at_brin"]
+
+
+def test_audit_log_is_append_only(user: Any, other_user: Any) -> None:
+    entry = AuditLog.objects.create(
+        actor=other_user, model="Account", object_id="1", action=AuditAction.CREATE
+    )
+    for attempt in (
+        lambda: AuditLog.objects.filter(pk=entry.pk).update(after={"forged": True}),
+        lambda: AuditLog.objects.filter(pk=entry.pk).delete(),
+    ):
+        with pytest.raises(IntegrityError, match="append-only"), transaction.atomic():
+            attempt()
+
+    # Deleting the actor still works: ON DELETE SET NULL is the one allowed update.
+    other_user.delete()
+    entry.refresh_from_db()
+    assert entry.actor_id is None
+    assert entry.action == AuditAction.CREATE
