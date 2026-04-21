@@ -57,7 +57,8 @@ class BudgetViewSet(UserScopedModelViewSet):
         total = Transaction.objects.filter(spent_filter).aggregate(total=Sum("amount"))["total"]
         spent = abs(total or Decimal("0"))
         limit = budget.limit_amount
-        utilization = float(spent / limit) if limit > 0 else 0.0
+        # A share of the limit, exact like the amounts; undefined for a zero limit.
+        utilization = (spent / limit).quantize(Decimal("0.0001")) if limit > 0 else None
 
         payload = {
             "id": budget.pk,
@@ -68,7 +69,7 @@ class BudgetViewSet(UserScopedModelViewSet):
             "limit_amount": limit,
             "spent_amount": spent,
             "remaining_amount": limit - spent,
-            "utilization": round(utilization, 4),
+            "utilization": utilization,
             "is_over": spent > limit,
         }
         return Response(BudgetStatusSerializer(payload).data)

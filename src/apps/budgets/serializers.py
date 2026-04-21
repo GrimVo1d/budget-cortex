@@ -75,5 +75,5 @@ class BudgetStatusSerializer(serializers.Serializer[dict[str, Any]]):
     limit_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
     spent_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
     remaining_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
-    utilization = serializers.FloatField()
+    utilization = serializers.DecimalField(max_digits=12, decimal_places=4, allow_null=True)
     is_over = serializers.BooleanField()

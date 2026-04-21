@@ -42,6 +42,7 @@ def test_status_counts_children_and_matching_currency_only(client: APIClient, us
 
     assert status["spent_amount"] == "130.00"
     assert status["remaining_amount"] == "-30.00"
+    assert status["utilization"] == "1.3000"
     assert status["is_over"] is True
 
 
@@ -72,3 +73,14 @@ def test_overlapping_budgets_are_rejected(client: APIClient, user: Any) -> None:
 def test_period_end_must_follow_start(client: APIClient) -> None:
     resp = _budget(client, period_end="2026-04-01T00:00:00Z")
     assert resp.status_code == 400
+
+
+def test_utilization_of_a_zero_limit_is_null(client: APIClient, user: Any) -> None:
+    food = make_category(user, "Food")
+    make_tx(make_account(user), "-5.00", datetime(2026, 4, 2, tzinfo=UTC), food)
+    budget_id = _budget(client, category=food.pk, limit_amount="0.00").json()["id"]
+
+    status = client.get(f"{BUDGETS}{budget_id}/status/").json()
+
+    assert status["utilization"] is None
+    assert status["is_over"] is True

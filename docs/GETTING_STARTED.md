@@ -105,6 +105,10 @@ curl -s "${auth[@]}" "${json[@]}" -d "{\"refresh\":\"$(jq -r .refresh <<<"$NEW")
 
 Report months are half-open: `from=2026-10&to=2026-11` means October only.
 
+Amounts and ratios are decimal strings, never floats: `"spent_amount": "750.50"`,
+`"utilization": "1.5010"` (a share of the limit), `"overrun_pct": "150.10"`. With a zero
+limit both ratios are `null`.
+
 Errors always have the same shape, with a stable `code` to branch on:
 
 ```json

@@ -104,7 +104,7 @@ def test_overruns_include_child_categories(user: Any, ledger: dict[str, Any]) ->
     refresh_materialized_views()
     [row] = overruns_report(user.pk)
     assert row.spent_amount == Decimal("130.00")
-    assert row.overrun_pct == 130.0
+    assert row.overrun_pct == Decimal("130.00")
 
 
 def test_overruns_cover_budgets_not_aligned_to_months(user: Any, ledger: dict[str, Any]) -> None:

@@ -23,7 +23,7 @@ class OverrunRow:
     currency: str
     limit_amount: Decimal
     spent_amount: Decimal
-    overrun_pct: float
+    overrun_pct: Decimal | None  # spent as a percentage of the limit; None for a zero limit
 
 
 SQL = """
@@ -54,7 +54,7 @@ SELECT
     currency,
     limit_amount,
     spent_amount,
-    (spent_amount / NULLIF(limit_amount, 0))::float AS overrun_ratio
+    round(spent_amount * 100 / NULLIF(limit_amount, 0), 2) AS overrun_pct
 FROM spent
 WHERE spent_amount > limit_amount
 ORDER BY (spent_amount - limit_amount) DESC
@@ -72,7 +72,7 @@ def overruns_report(user_id: int) -> list[OverrunRow]:
             currency=r[2],
             limit_amount=r[3],
             spent_amount=r[4],
-            overrun_pct=round((r[5] or 0.0) * 100, 2),
+            overrun_pct=r[5],
         )
         for r in rows
     ]

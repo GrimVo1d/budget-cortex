@@ -32,4 +32,6 @@ class OverrunRowSerializer(serializers.Serializer[Any]):
     currency = serializers.CharField(read_only=True)
     limit_amount = serializers.DecimalField(**_MONEY)
     spent_amount = serializers.DecimalField(**_MONEY)
-    overrun_pct = serializers.FloatField(read_only=True)
+    overrun_pct = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True, allow_null=True
+    )
