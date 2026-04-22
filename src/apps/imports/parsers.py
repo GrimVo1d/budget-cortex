@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, replace
@@ -49,11 +50,14 @@ def _to_decimal(raw: str) -> Decimal:
     return value
 
 
+_CURRENCY_RE = re.compile(r"[A-Z]{3}")
+
+
 def _to_currency(raw: str) -> str | None:
     code = raw.strip().upper()
     if not code:
         return None
-    if len(code) != 3 or not code.isalpha():
+    if not _CURRENCY_RE.fullmatch(code):
         raise ImportFormatError(f"bad currency {raw!r}")
     return code
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from django.contrib.auth import get_user_model
@@ -61,11 +62,26 @@ class AccountSerializer(serializers.ModelSerializer[Account]):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate_currency(self, currency: str) -> str:
-        return validate_currency_code(currency)
+        code = validate_currency_code(currency)
+        # Transactions are stored in their account's currency (deleted ones
+        # included), so the currency is fixed once the account has any.
+        account = self.instance
+        if (
+            isinstance(account, Account)
+            and code != account.currency
+            and account.transactions.exists()
+        ):
+            raise serializers.ValidationError(
+                "the currency of an account with transactions cannot change"
+            )
+        return code
+
+
+_CURRENCY_RE = re.compile(r"[A-Z]{3}")
 
 
 def validate_currency_code(value: str) -> str:
     code = value.strip().upper()
-    if len(code) != 3 or not code.isalpha():
+    if not _CURRENCY_RE.fullmatch(code):
         raise serializers.ValidationError("currency must be a 3-letter ISO 4217 code")
     return code

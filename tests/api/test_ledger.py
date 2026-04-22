@@ -294,3 +294,27 @@ def test_transaction_currency_must_match_its_account(client: APIClient, user: An
     moved = client.patch(f"{TX}{tx.pk}/", {"account": usd.pk}, format="json")
     assert moved.status_code == 400
     assert "currency" in moved.json()["detail"]
+
+
+def test_account_currency_is_fixed_once_it_has_transactions(client: APIClient, user: Any) -> None:
+    acc = make_account(user)
+    tx = make_tx(acc, "-5.00", datetime(2026, 4, 1, tzinfo=UTC))
+    tx.is_deleted = True
+    tx.save()
+
+    resp = client.patch(f"/api/v1/accounts/{acc.pk}/", {"currency": "USD"}, format="json")
+
+    assert resp.status_code == 400
+    assert "currency" in resp.json()["detail"]
+    empty = make_account(user, name="Empty")
+    ok = client.patch(f"/api/v1/accounts/{empty.pk}/", {"currency": "usd"}, format="json")
+    assert ok.json()["currency"] == "USD"
+
+
+def test_currency_codes_are_ascii_letters_only(client: APIClient) -> None:
+    resp = client.post(
+        "/api/v1/accounts/",
+        {"name": "W", "type": "cash", "currency": "\u0434\u043e\u043b"},
+        format="json",
+    )
+    assert resp.status_code == 400
