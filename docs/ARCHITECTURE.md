@@ -175,7 +175,7 @@ from `ledger_transaction`.
 | `budget_period_range_idx` | partial B-tree | portable range scans on budget periods |
 | `category_unique_alive_per_parent`, `category_unique_alive_root`, `tag_unique_alive_per_user` | partial unique | names unique among live rows only; root categories need their own constraint because `NULL` parents never compare equal |
 | `mv_*_uniq` | unique on each MV | required for concurrent refresh |
-| `auditlog_append_only` | `BEFORE UPDATE OR DELETE` row trigger (PostgreSQL only) | audit rows cannot be changed or removed; the only update allowed is `actor_id` → `NULL` when the user is deleted |
+| `auditlog_append_only` | `BEFORE UPDATE OR DELETE` row trigger (PostgreSQL only), function with a pinned `search_path` | audit rows cannot be changed or removed; `actor` is `PROTECT`, so a user who appears in the log is deactivated rather than deleted |
 
 The exclusion constraint:
 
@@ -258,10 +258,12 @@ rate from the client and store the converted amount on the credit leg.
 
 ### Accepted risks
 
-- The append-only trigger guards against the application, not against the database owner:
-  the application role owns the table, so it can still `TRUNCATE` it (test teardown does)
-  or drop the trigger. `QuerySet.update()` and `bulk_create()` bypass signals, so they
-  would skip the log; the code does not use them on audited models.
+- The append-only trigger stops accidental rewrites (a stray ORM `update()` or `delete()`),
+  not a compromised application: the application role owns the table, so with SQL
+  injection or code execution it could `TRUNCATE` it (test teardown does) or drop the
+  trigger. Inserts are not restricted either, so append-only does not prove that a row is
+  genuine. `QuerySet.update()` and `bulk_create()` bypass signals, so they would skip the
+  log; the code does not use them on audited models.
 - The application connects to PostgreSQL as the database owner; a separate low-privilege
   role would need an init script.
 - Registration reveals whether a username exists (unavoidable with open sign-up); the auth

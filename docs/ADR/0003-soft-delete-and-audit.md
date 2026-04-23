@@ -22,7 +22,8 @@ changed what and when, including for rows the user removed.
    recorded as `delete`. The actor is a `ContextVar`: the API binds the authenticated user
    after DRF authentication, Celery tasks bind the user they act for, so service code
    does not pass `actor=` around. On PostgreSQL a row trigger makes the table
-   append-only: `UPDATE` and `DELETE` fail, except the `ON DELETE SET NULL` of the actor.
+   append-only: every `UPDATE` and `DELETE` fails. The actor is `PROTECT`, so a user who
+   appears in the log is deactivated instead of deleted.
 
 ## Consequences
 
@@ -32,8 +33,9 @@ changed what and when, including for rows the user removed.
 and the owner-restricted querysets.
 **−** `QuerySet.update()` and `bulk_create()` bypass signals and therefore the audit
 log; they are not used on audited models.
-**−** The trigger stops the application from rewriting history, but not the database
-owner, which can truncate the table or drop the trigger.
+**−** The trigger stops accidental rewrites, not a compromised application: the
+application role owns the table and can truncate it or drop the trigger, and it can
+always insert rows.
 
 ## Alternatives
 

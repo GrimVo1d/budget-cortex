@@ -11,9 +11,11 @@ class AuditAction(models.TextChoices):
 
 
 class AuditLog(models.Model):
+    # PROTECT: the log is append-only (a database trigger on PostgreSQL), so a
+    # user who appears in it cannot be deleted; deactivate them instead.
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="+",

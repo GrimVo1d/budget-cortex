@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 from django.db import IntegrityError, connection, transaction
+from django.db.models import ProtectedError
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -178,19 +179,24 @@ def test_pg_only_indexes_exist() -> None:
     assert "USING brin" in indexes["tx_occurred_at_brin"]
 
 
-def test_audit_log_is_append_only(user: Any, other_user: Any) -> None:
+def test_audit_log_is_append_only(other_user: Any) -> None:
     entry = AuditLog.objects.create(
         actor=other_user, model="Account", object_id="1", action=AuditAction.CREATE
     )
     for attempt in (
         lambda: AuditLog.objects.filter(pk=entry.pk).update(after={"forged": True}),
+        lambda: AuditLog.objects.filter(pk=entry.pk).update(actor=None),
         lambda: AuditLog.objects.filter(pk=entry.pk).delete(),
     ):
         with pytest.raises(IntegrityError, match="append-only"), transaction.atomic():
             attempt()
 
-    # Deleting the actor still works: ON DELETE SET NULL is the one allowed update.
-    other_user.delete()
+    # The actor cannot be deleted from under the log either.
+    with pytest.raises(ProtectedError):
+        other_user.delete()
     entry.refresh_from_db()
-    assert entry.actor_id is None
-    assert entry.action == AuditAction.CREATE
+    assert entry.actor_id == other_user.pk
+
+    with connection.cursor() as cur:
+        cur.execute("SELECT proconfig FROM pg_proc WHERE proname = 'core_auditlog_append_only'")
+        assert cur.fetchone()[0] == ["search_path=pg_catalog, pg_temp"]
