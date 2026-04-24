@@ -84,3 +84,17 @@ def test_utilization_of_a_zero_limit_is_null(client: APIClient, user: Any) -> No
 
     assert status["utilization"] is None
     assert status["is_over"] is True
+
+
+def test_status_handles_a_huge_ratio_to_a_tiny_limit(client: APIClient, user: Any) -> None:
+    food = make_category(user, "Food")
+    acc = make_account(user)
+    for day in (2, 3):
+        make_tx(acc, "-999999999999.99", datetime(2026, 4, day, tzinfo=UTC), food)
+    budget_id = _budget(client, category=food.pk, limit_amount="0.01").json()["id"]
+
+    resp = client.get(f"{BUDGETS}{budget_id}/status/")
+
+    assert resp.status_code == 200
+    assert resp.json()["spent_amount"] == "1999999999999.98"
+    assert resp.json()["utilization"] == "199999999999998.0000"

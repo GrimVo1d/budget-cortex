@@ -73,7 +73,9 @@ class BudgetStatusSerializer(serializers.Serializer[dict[str, Any]]):
     period_end = serializers.DateTimeField()
     currency = serializers.CharField()
     limit_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
-    spent_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
-    remaining_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
-    utilization = serializers.DecimalField(max_digits=12, decimal_places=4, allow_null=True)
+    # Computed values: a sum of many amounts or a ratio to a tiny limit can
+    # outgrow any column width, so no max_digits (it would raise on output).
+    spent_amount = serializers.DecimalField(max_digits=None, decimal_places=2)
+    remaining_amount = serializers.DecimalField(max_digits=None, decimal_places=2)
+    utilization = serializers.DecimalField(max_digits=None, decimal_places=4, allow_null=True)
     is_over = serializers.BooleanField()

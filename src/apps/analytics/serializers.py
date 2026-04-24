@@ -6,7 +6,8 @@ from typing import Any
 
 from rest_framework import serializers
 
-_MONEY: dict[str, Any] = {"max_digits": 18, "decimal_places": 2, "read_only": True}
+# Aggregates have no fixed width; max_digits would raise on output when exceeded.
+_MONEY: dict[str, Any] = {"max_digits": None, "decimal_places": 2, "read_only": True}
 
 
 class CashflowRowSerializer(serializers.Serializer[Any]):
@@ -33,5 +34,5 @@ class OverrunRowSerializer(serializers.Serializer[Any]):
     limit_amount = serializers.DecimalField(**_MONEY)
     spent_amount = serializers.DecimalField(**_MONEY)
     overrun_pct = serializers.DecimalField(
-        max_digits=12, decimal_places=2, read_only=True, allow_null=True
+        max_digits=None, decimal_places=2, read_only=True, allow_null=True
     )

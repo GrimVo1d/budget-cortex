@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from decimal import InvalidOperation
 from typing import Any
 
 import pytest
@@ -19,7 +20,11 @@ pytestmark = pytest.mark.django_db
 
 @pytest.mark.parametrize(
     ("exc", "status", "code"),
-    [(IntegrityError("dup"), 409, "conflict"), (DataError("overflow"), 400, "invalid_value")],
+    [
+        (IntegrityError("dup"), 409, "conflict"),
+        (DataError("overflow"), 400, "invalid_value"),
+        (InvalidOperation(), 400, "invalid_value"),
+    ],
 )
 def test_database_errors_are_mapped(exc: Exception, status: int, code: str) -> None:
     resp = exception_handler(exc, {})

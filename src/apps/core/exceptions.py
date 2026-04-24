@@ -6,6 +6,7 @@ Clients branch on the stable ``code``; ``detail`` is free to evolve.
 
 from __future__ import annotations
 
+from decimal import InvalidOperation
 from typing import Any
 
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
@@ -51,8 +52,9 @@ def exception_handler(exc: Exception, context: dict[str, Any]) -> Response | Non
             {"code": "conflict", "detail": "conflicts with an existing record"},
             status=status.HTTP_409_CONFLICT,
         )
-    if isinstance(exc, DataError):
-        # e.g. a computed amount that does not fit NUMERIC(14, 2).
+    if isinstance(exc, DataError | InvalidOperation):
+        # e.g. a computed amount that does not fit NUMERIC(14, 2), or a Decimal
+        # operation out of the context's range.
         return Response(
             {"code": "invalid_value", "detail": "a value is out of range"},
             status=status.HTTP_400_BAD_REQUEST,
