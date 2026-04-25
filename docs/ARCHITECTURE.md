@@ -62,10 +62,12 @@ FxRate (base, quote, effective_on)          AuditLog (actor → User)
   ([ADR-0005](ADR/0005-budget-period-range.md)).
 - A transaction is always in its account's currency: the API and the CSV import reject
   anything else, and an account's currency is fixed once it has transactions (deleted
-  ones included). So the running balance can sum amounts as they are. Rows written before
-  this rule are not rewritten; editing their account or currency has to fix the mismatch. Money moves between
-  currencies only through a transfer. Reports group by currency instead of
-  converting ([ADR-0004](ADR/0004-multi-currency-normalization.md)).
+  ones included). On PostgreSQL a composite foreign key `(account_id, currency)` enforces
+  both rules against concurrent requests too. So the running balance can sum amounts as
+  they are. Rows written before this rule are not rewritten; editing their account or
+  currency has to fix the mismatch. Money moves between currencies only through a
+  transfer. Reports group by currency instead of converting
+  ([ADR-0004](ADR/0004-multi-currency-normalization.md)).
 
 ## Request handling
 
@@ -171,6 +173,7 @@ from `ledger_transaction`.
 | `tx_user_import_hash_unique` | partial unique `(user_id, import_hash) WHERE import_hash IS NOT NULL` | idempotent CSV import without indexing manual rows |
 | `tx_external_id_idx` | partial `WHERE external_id IS NOT NULL` | lookups by external id |
 | `tx_occurred_at_brin` | BRIN on `occurred_at` (PostgreSQL only) | cheap index for historical range scans on an append-mostly table |
+| `tx_account_currency_fk`, `account_id_currency_uniq` | composite FK `(account_id, currency)` → `accounts_account (id, currency)`, `ON UPDATE RESTRICT`, `NOT VALID` (PostgreSQL only) | a transaction is in its account's currency, and a used account cannot change currency, even under concurrent requests; rows older than the rule are not checked |
 | `budget_no_overlap` | GiST exclusion constraint (PostgreSQL only, `btree_gist`) | no two live budgets of one user, category and currency overlap |
 | `budget_period_range_idx` | partial B-tree | portable range scans on budget periods |
 | `category_unique_alive_per_parent`, `category_unique_alive_root`, `tag_unique_alive_per_user` | partial unique | names unique among live rows only; root categories need their own constraint because `NULL` parents never compare equal |

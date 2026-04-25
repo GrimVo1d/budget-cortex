@@ -81,7 +81,8 @@ _CURRENCY_RE = re.compile(r"[A-Z]{3}")
 
 
 def validate_currency_code(value: str) -> str:
-    code = value.strip().upper()
-    if not _CURRENCY_RE.fullmatch(code):
+    # isascii() goes first: upper() folds some non-ASCII letters into ASCII (long s -> "S").
+    code = value.strip()
+    if not code.isascii() or not _CURRENCY_RE.fullmatch(code.upper()):
         raise serializers.ValidationError("currency must be a 3-letter ISO 4217 code")
-    return code
+    return code.upper()

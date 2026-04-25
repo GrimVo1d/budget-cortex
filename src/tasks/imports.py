@@ -54,10 +54,10 @@ def parse_csv_import(import_id: int) -> dict[str, int]:
         return _fail(job, "uploaded file is not readable")
 
     expected = job.account.currency
-    for n, r in enumerate(rows, start=1):
+    for r in rows:
         if r.currency is not None and r.currency != expected:
             return _fail(
-                job, f"row {n}: currency {r.currency} does not match the account ({expected})"
+                job, f"line {r.line}: currency {r.currency} does not match the account ({expected})"
             )
 
     inserted = 0

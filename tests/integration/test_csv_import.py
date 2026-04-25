@@ -132,5 +132,5 @@ def test_row_in_another_currency_fails_the_whole_job(user: Any, account: Any) ->
     parse_csv_import(_job(user, account, content).pk)
     job = CsvImport.objects.get()
     assert job.status == ImportStatus.FAILED
-    assert job.error == "row 2: currency USD does not match the account (RUB)"
+    assert job.error == "line 3: currency USD does not match the account (RUB)"
     assert not Transaction.objects.exists()

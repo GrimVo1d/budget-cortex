@@ -311,10 +311,11 @@ def test_account_currency_is_fixed_once_it_has_transactions(client: APIClient, u
     assert ok.json()["currency"] == "USD"
 
 
-def test_currency_codes_are_ascii_letters_only(client: APIClient) -> None:
+@pytest.mark.parametrize("code", ["\u0434\u043e\u043b", "u\u017fd", "\u00dfx"])
+def test_currency_codes_are_ascii_letters_only(client: APIClient, code: str) -> None:
     resp = client.post(
         "/api/v1/accounts/",
-        {"name": "W", "type": "cash", "currency": "\u0434\u043e\u043b"},
+        {"name": "W", "type": "cash", "currency": code},
         format="json",
     )
     assert resp.status_code == 400

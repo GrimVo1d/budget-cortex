@@ -15,11 +15,13 @@ from django.db.models import ProtectedError
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from apps.accounts.models import Account
 from apps.analytics.queries.by_category import by_category_report
 from apps.analytics.queries.cashflow import cashflow_report
 from apps.analytics.queries.overruns import overruns_report
 from apps.budgets.models import Budget, BudgetPeriod
 from apps.core.models import AuditAction, AuditLog
+from apps.ledger.models import Transaction
 from apps.ledger.services import TransferRequest, create_transfer
 from tasks.analytics import refresh_materialized_views
 from tests.factories import make_account, make_category, make_tx
@@ -200,3 +202,20 @@ def test_audit_log_is_append_only(other_user: Any) -> None:
     with connection.cursor() as cur:
         cur.execute("SELECT proconfig FROM pg_proc WHERE proname = 'core_auditlog_append_only'")
         assert cur.fetchone()[0] == ["search_path=pg_catalog, pg_temp"]
+
+
+def test_database_ties_transaction_currency_to_the_account(user: Any) -> None:
+    acc = make_account(user)
+    tx = make_tx(acc, "-5.00", APRIL)
+    tx.is_deleted = True
+    tx.save()
+
+    # What a concurrent request could slip past the serializer checks.
+    with pytest.raises(IntegrityError), transaction.atomic():
+        Account.objects.filter(pk=acc.pk).update(currency="USD")
+    with pytest.raises(IntegrityError), transaction.atomic():
+        make_tx(acc, "-1.00", APRIL, currency="USD")
+
+    empty = make_account(user, name="Empty")
+    Account.objects.filter(pk=empty.pk).update(currency="USD")
+    assert Transaction.objects.filter(account=acc).count() == 1

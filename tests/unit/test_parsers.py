@@ -45,6 +45,7 @@ def test_generic_columns_can_be_reordered_and_optional() -> None:
         "date,amount\n2026-04-01,NaN\n",
         "date,amount,currency\n2026-04-01,1,RUBX\n",
         "date,amount,currency\n2026-04-01,1,\u0440\u0443\u0431\n",  # Cyrillic
+        "date,amount,currency\n2026-04-01,1,u\u017fd\n",  # long s, upper() gives "USD"
         "date,amount,currency\n2026-04-01,1\n",
         "when,how_much\n2026-04-01,1\n",
     ],

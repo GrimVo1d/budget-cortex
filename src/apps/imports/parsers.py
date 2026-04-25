@@ -33,6 +33,7 @@ class ParsedRow:
     currency: str | None  # None: not in the file, the import uses the account's currency
     description: str
     raw_hash: str  # sha256 of the source cells; used for dedup
+    line: int = 0  # line in the file (header included), for error messages
 
 
 def _hash_cells(cells: Iterable[str]) -> str:
@@ -54,12 +55,13 @@ _CURRENCY_RE = re.compile(r"[A-Z]{3}")
 
 
 def _to_currency(raw: str) -> str | None:
-    code = raw.strip().upper()
+    code = raw.strip()
     if not code:
         return None
-    if not _CURRENCY_RE.fullmatch(code):
+    # isascii() goes first: upper() folds some non-ASCII letters into ASCII (long s -> "S").
+    if not code.isascii() or not _CURRENCY_RE.fullmatch(code.upper()):
         raise ImportFormatError(f"bad currency {raw!r}")
-    return code
+    return code.upper()
 
 
 def _to_datetime(raw: str, fmt: str | None) -> datetime:
@@ -92,6 +94,7 @@ def parse_generic(stream: Iterable[str]) -> Iterator[ParsedRow]:
             currency=_to_currency(row[i_cur] if i_cur is not None else ""),
             description=row[i_desc].strip() if i_desc is not None else "",
             raw_hash=_hash_cells(row),
+            line=reader.line_num,
         )
 
 
@@ -110,6 +113,7 @@ def parse_tinkoff(stream: Iterable[str]) -> Iterator[ParsedRow]:
             currency=_to_currency(row[2]),
             description=row[3].strip(),
             raw_hash=_hash_cells(row),
+            line=reader.line_num,
         )
 
 
@@ -128,6 +132,7 @@ def parse_sberbank(stream: Iterable[str]) -> Iterator[ParsedRow]:
             currency="RUB",
             description=row[2].strip(),
             raw_hash=_hash_cells(row),
+            line=reader.line_num,
         )
 
 
