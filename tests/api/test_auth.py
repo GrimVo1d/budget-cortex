@@ -95,6 +95,17 @@ def test_flush_task_drops_only_expired_tokens(anon: APIClient, user: Any) -> Non
     assert not OutstandingToken.objects.filter(pk=stale.pk).exists()
 
 
+def test_deactivated_user_loses_access_and_refresh(anon: APIClient, user: Any) -> None:
+    tokens = anon.post(TOKEN, {"username": "alice", "password": "pw-12345"}, format="json").json()
+    user.is_active = False
+    user.save()
+
+    anon.credentials(HTTP_AUTHORIZATION=f"Bearer {tokens['access']}")
+    assert anon.get("/api/v1/accounts/").status_code == 401
+    anon.credentials()
+    assert anon.post(REFRESH, {"refresh": tokens["refresh"]}, format="json").status_code == 401
+
+
 def test_api_requires_authentication(anon: APIClient) -> None:
     resp = anon.get("/api/v1/accounts/")
     assert resp.status_code == 401

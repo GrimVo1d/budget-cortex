@@ -20,7 +20,8 @@ than the CRUD itself:
   "does not exist"), and `DELETE` is a soft delete.
 - Atomic transfers, including cross-currency ones with an explicit rate.
 - Budgets with a live `status` endpoint (spent, remaining, utilization).
-- Reports: monthly cashflow, spending by category with roll-up to the root category, budget overruns.
+- Reports: monthly cashflow, spending by category with roll-up to the root category,
+  budget overruns.
 - CSV export (streamed, protected against spreadsheet formula injection).
 - CSV import (generic, Tinkoff, Sberbank formats) processed by a Celery worker, idempotent per line.
 - Audit log of every create, update and delete of accounts, categories, transactions and

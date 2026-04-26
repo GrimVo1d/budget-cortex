@@ -34,8 +34,10 @@ and the owner-restricted querysets.
 **−** `QuerySet.update()` and `bulk_create()` bypass signals and therefore the audit
 log; they are not used on audited models.
 **−** The trigger stops accidental rewrites, not a compromised application: the
-application role owns the table and can truncate it or drop the trigger, and it can
-always insert rows.
+application role owns the table (a superuser in the compose stack) and can truncate it,
+drop or bypass the trigger, and it can always insert rows.
+**−** Users who appear in the log are deactivated, never deleted; there is no
+anonymization.
 
 ## Alternatives
 

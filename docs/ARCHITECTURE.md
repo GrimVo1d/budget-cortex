@@ -88,7 +88,9 @@ FxRate (base, quote, effective_on)          AuditLog (actor → User)
   `not_authenticated`, `token_not_valid`, `throttled`, `invalid_month`, `invalid_range`,
   `transfer_error`, `category_has_children`, `duplicate_file`, `file_too_large`,
   `report_not_ready`, `queue_unavailable`. Database errors that slip past validation never
-  become an HTML 500: `IntegrityError` is `409 conflict`, `DataError` is `400 invalid_value`.
+  become an HTML 500: `IntegrityError` is `409 conflict`; `DataError` and
+  `decimal.InvalidOperation` are `400 invalid_value`, logged with a traceback since they
+  can also be a server bug.
 - **Ordering.** List endpoints accept `ordering`, and the id is always appended as the last
   key in the same direction, so rows with equal timestamps have a stable order across
   pages.
@@ -262,13 +264,18 @@ rate from the client and store the converted amount on the credit leg.
 ### Accepted risks
 
 - The append-only trigger stops accidental rewrites (a stray ORM `update()` or `delete()`),
-  not a compromised application: the application role owns the table, so with SQL
-  injection or code execution it could `TRUNCATE` it (test teardown does) or drop the
-  trigger. Inserts are not restricted either, so append-only does not prove that a row is
-  genuine. `QuerySet.update()` and `bulk_create()` bypass signals, so they would skip the
-  log; the code does not use them on audited models.
-- The application connects to PostgreSQL as the database owner; a separate low-privilege
-  role would need an init script.
+  not a compromised application: the application role owns the table (and is a superuser
+  in compose, see below), so with SQL injection or code execution it could `TRUNCATE` it
+  (test teardown does), drop or bypass the trigger. Inserts are not restricted either, so
+  append-only does not prove that a row is genuine. `QuerySet.update()` and
+  `bulk_create()` bypass signals, so they would skip the log; the code does not use them
+  on audited models.
+- In the compose stack the application connects as `POSTGRES_USER`, which the postgres
+  image creates as a superuser. Besides owning the tables, it can switch the audit trigger
+  off for a session (`SET session_replication_role = replica`) and run `COPY ... TO
+  PROGRAM` in the database container. A production deployment should use a separate
+  non-superuser role that does not own `core_auditlog` and can only `INSERT`/`SELECT` it;
+  the compose stack does not set one up.
 - Registration reveals whether a username exists (unavoidable with open sign-up); the auth
   throttle limits enumeration.
 - `/admin/` has no brute-force lockout beyond Django's defaults, and its static files are
@@ -290,3 +297,6 @@ rate from the client and store the converted amount on the credit leg.
   imported rows count toward budgets once they are categorized.
 - Currency codes are checked for shape (three uppercase letters), not against ISO 4217.
 - The audit log has no API; read it from the database or the Django shell.
+- A user who appears in the audit log cannot be deleted (`PROTECT`), and nothing anonymizes
+  a user's data. To shut an account, deactivate it (`/admin/` or `is_active = False`):
+  its access and refresh tokens stop working at once.

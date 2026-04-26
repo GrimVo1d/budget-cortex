@@ -6,6 +6,7 @@ Clients branch on the stable ``code``; ``detail`` is free to evolve.
 
 from __future__ import annotations
 
+import logging
 from decimal import InvalidOperation
 from typing import Any
 
@@ -15,6 +16,8 @@ from django.http import Http404
 from rest_framework import exceptions, status
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_default_handler
+
+logger = logging.getLogger(__name__)
 
 
 class ApiError(exceptions.APIException):
@@ -53,6 +56,8 @@ def exception_handler(exc: Exception, context: dict[str, Any]) -> Response | Non
             status=status.HTTP_409_CONFLICT,
         )
     if isinstance(exc, DataError | InvalidOperation):
+        # A 400 for the client, but a traceback for us: this can also be a server bug.
+        logger.warning("value_out_of_range", exc_info=exc)
         # e.g. a computed amount that does not fit NUMERIC(14, 2), or a Decimal
         # operation out of the context's range.
         return Response(
